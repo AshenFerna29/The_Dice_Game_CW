@@ -1,6 +1,10 @@
 package com.example.thedicegamecw
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,7 +27,7 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 @Composable
-fun GameScreen(navController: NavController) {
+fun GameScreen(navController: NavController, gameViewModel: GameViewModel) {
     var humanDice by remember { mutableStateOf(List(5) { Random.nextInt(1, 7) }) }
     var computerDice by remember { mutableStateOf(List(5) { Random.nextInt(1, 7) }) }
     var humanScore by remember { mutableStateOf(0) }
@@ -33,9 +38,15 @@ fun GameScreen(navController: NavController) {
     var gameStarted by remember { mutableStateOf(false) }
     var winner by remember { mutableStateOf<String?>(null) }
     var showDialog by remember { mutableStateOf(false) }
-    var selectedDice by remember { mutableStateOf(mutableSetOf<Int>()) } // Selected dice for reroll
+    val (selectedDice, setSelectedDice) = remember { mutableStateOf(mutableSetOf<Int>()) }
     val coroutineScope = rememberCoroutineScope()
     val scaffoldState = rememberScaffoldState()
+    var isTieBreakerMode by remember { mutableStateOf(false) }
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+
+
+
 
     if (!gameStarted) {
         Box(
@@ -94,31 +105,42 @@ fun GameScreen(navController: NavController) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text("🎲 Dice Clash 🎲", fontSize = 32.sp, color = Color.White)
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text("🎯 Target Score: $targetScore", fontSize = 20.sp, color = Color.Yellow)
+                        Spacer(modifier = Modifier.height(15.dp))
+                        Text(
+                            text = "📊 Score : You - $humanScore | CPU - $computerScore",
+                            fontSize = 16.sp,
+                            color = Color.White,
+                            modifier = Modifier
+
+                                .padding(top = 8.dp, end = 0.dp)
+                        )
+                        Spacer(modifier = Modifier.height(15.dp))
+                        Text(
+                            "🥇 Wins: H - ${gameViewModel.humanWins} | CPU - ${gameViewModel.computerWins}",
+                            color = Color.White,
+                            fontSize = 18.sp
+                        )
+
                     }
 
-                    Text(
-                        text = "Marks 🎯\nYou: $humanScore | CPU: $computerScore",
-                        fontSize = 14.sp,
-                        color = Color.White,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(end = 8.dp)
-                    )
                 }
-
-
                 Spacer(modifier = Modifier.height(30.dp))
 
                 Text("👤 Your Dice (Click to Keep)", color = Color.White, fontSize = 22.sp)
-                SelectableDiceRow(humanDice, selectedDice)
+                SelectableDiceRow(
+                    dice = humanDice,
+                    selectedDice = selectedDice,
+                    onSelect = setSelectedDice
+                )
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -172,12 +194,39 @@ fun GameScreen(navController: NavController) {
 
                         Button(
                             onClick = {
-                                humanScore += humanDice.sum()
-                                computerScore += computerDice.sum()
-                                rollCount = 0
-                                selectedDice.clear()
-                                checkWinner(humanScore, computerScore, targetScore) { result ->
-                                    winner = result
+                                coroutineScope.launch {
+
+                                    computerDice = smartComputerRerollStrategy(computerDice, computerScore, humanScore, targetScore)
+
+
+                                    // Final score addition
+                                    humanScore += humanDice.sum()
+                                    computerScore += computerDice.sum()
+                                    rollCount = 0
+                                    selectedDice.clear()
+
+                                    checkWinner(humanScore, computerScore, targetScore) { result ->
+                                        if (result == "It's a Tie! 🔄") {
+                                            isTieBreakerMode = true
+                                            coroutineScope.launch {
+                                                handleTieBreaker(
+                                                    onResult = { finalResult ->
+                                                        winner = finalResult
+                                                        if (finalResult.contains("Win")) gameViewModel.humanWins++
+                                                        else if (finalResult.contains("Lose")) gameViewModel.computerWins++
+                                                    }
+                                                )
+                                            }
+                                        } else {
+                                            winner = result
+                                            if (result?.contains("Win") == true) {
+                                                gameViewModel.humanWins++
+                                            } else if (result?.contains("Lose") == true) {
+                                                gameViewModel.computerWins++
+                                            }
+                                        }
+                                    }
+
                                 }
                             },
                             shape = RoundedCornerShape(15.dp),
@@ -197,11 +246,7 @@ fun GameScreen(navController: NavController) {
                     Spacer(modifier = Modifier.height(10.dp))
                 }
 
-                Text(
-                    "🏆 Score: You - $humanScore | Computer - $computerScore",
-                    color = Color.White,
-                    fontSize = 22.sp
-                )
+
 
                 LaunchedEffect(winner) {
                     if (winner != null) {
@@ -259,7 +304,11 @@ fun GameScreen(navController: NavController) {
 
 // ✅ Selectable Dice Row
 @Composable
-fun SelectableDiceRow(dice: List<Int>, selectedDice: MutableSet<Int>) {
+fun SelectableDiceRow(
+    dice: List<Int>,
+    selectedDice: Set<Int>,
+    onSelect: (MutableSet<Int>) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -268,29 +317,47 @@ fun SelectableDiceRow(dice: List<Int>, selectedDice: MutableSet<Int>) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         dice.forEachIndexed { index, value ->
+            val isSelected = selectedDice.contains(index)
+
+            val scale by animateFloatAsState(
+                targetValue = if (isSelected) 1.2f else 1f,
+                animationSpec = tween(durationMillis = 200)
+            )
+
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .padding(4.dp)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
                     .background(
-                        color = if (selectedDice.contains(index)) Color(0xFFB2FF59) else Color.Transparent, // Green highlight
+                        color = if (isSelected) Color(0xFFB2FF59) else Color.Transparent,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .shadow(
+                        elevation = if (isSelected) 10.dp else 0.dp,
                         shape = RoundedCornerShape(10.dp)
                     )
                     .clickable {
-                        selectedDice.clear()
-                        selectedDice.add(index) // Only one die can be selected at a time
+                        val newSelection = mutableSetOf<Int>()
+                        newSelection.add(index)
+                        onSelect(newSelection)
                     },
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     painter = painterResource(id = getDiceImage(value)),
-                    contentDescription = "Dice Image",
+                    contentDescription = "Dice $value",
                     modifier = Modifier.fillMaxSize()
                 )
             }
         }
     }
 }
+
+
 
 
 
@@ -310,6 +377,7 @@ suspend fun animateSelectiveDiceRoll(
 
 // ✅ Function to Check Winner
 fun checkWinner(humanScore: Int, computerScore: Int, targetScore: Int, onWin: (String?) -> Unit) {
+
     when {
         humanScore >= targetScore && computerScore >= targetScore -> {
             onWin(
@@ -360,3 +428,90 @@ fun DiceRow(dice: List<Int>, isRolling: Boolean) {
         }
     }
 }
+
+suspend fun completeComputerRolls(initialDice: List<Int>): List<Int> {
+    var dice = initialDice.toMutableList()
+    repeat(2) { // Up to 2 rerolls (i.e., total 3 rolls)
+        val wantsToReroll = Random.nextBoolean() // 50% chance
+        if (wantsToReroll) {
+            val selected = List(5) { Random.nextBoolean() } // randomly keep dice
+            dice = dice.mapIndexed { index, value ->
+                if (selected[index]) value else Random.nextInt(1, 7)
+            }.toMutableList()
+            delay(10)
+        }
+    }
+    return dice
+}
+
+
+suspend fun smartComputerRerollStrategy(
+    currentDice: List<Int>,
+    computerScore: Int,
+    humanScore: Int,
+    targetScore: Int
+): List<Int> {
+    var dice = currentDice.toMutableList()
+    repeat(2) { // Up to 2 rerolls
+        val scoreDiff = computerScore - humanScore
+        val nearWinning = computerScore >= targetScore - 10
+        val rerollIndices = mutableSetOf<Int>()
+
+        // Strategy to choose dice to reroll
+        dice.forEachIndexed { index, die ->
+            when {
+                scoreDiff < -20 -> { // Far behind: reroll dice < 5
+                    if (die < 5) rerollIndices.add(index)
+                }
+                nearWinning -> { // Play safe: reroll only 1s or 2s
+                    if (die <= 2) rerollIndices.add(index)
+                }
+                scoreDiff > 20 -> { // Far ahead: reroll only 1s
+                    if (die == 1) rerollIndices.add(index)
+                }
+                else -> { // Close game: reroll dice <= 3
+                    if (die <= 3) rerollIndices.add(index)
+                }
+            }
+        }
+
+        // If nothing selected, break early
+        if (rerollIndices.isEmpty()) return dice
+
+        // Reroll selected dice
+        dice = dice.mapIndexed { index, value ->
+            if (rerollIndices.contains(index)) Random.nextInt(1, 7) else value
+        }.toMutableList()
+
+        delay(300) // Simulate delay for reroll
+    }
+    return dice
+}
+
+suspend fun handleTieBreaker(onResult: (String) -> Unit) {
+    while (true) {
+        delay(500)
+        val humanRoll = List(5) { Random.nextInt(1, 7) }
+        val computerRoll = List(5) { Random.nextInt(1, 7) }
+
+        val humanSum = humanRoll.sum()
+        val computerSum = computerRoll.sum()
+
+        // Optional: you could show these rolls with a Toast/Snackbar for visual
+        if (humanSum > computerSum) {
+            onResult("You Win! 🎉 (Tie-breaker)")
+            return
+        } else if (computerSum > humanSum) {
+            onResult("You Lose 😞 (Tie-breaker)")
+            return
+        }
+        // If it's still a tie, repeat again
+    }
+}
+
+
+
+
+
+
+

@@ -1,4 +1,6 @@
 package com.example.dicegamecw
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -22,7 +24,9 @@ import com.example.thedicegamecw.R
 fun MainScreen(navController: NavController) {
     var showAbout by remember { mutableStateOf(false) }
 
-    // Gradient Background
+    // Detect screen width to toggle layout
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -33,57 +37,104 @@ fun MainScreen(navController: NavController) {
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-
-            // Welcome Image
-            Image(
-                painter = painterResource(id = R.drawable.dice),
-                contentDescription = "Welcome Image",
+        if (isLandscape) {
+            // 📱 Landscape Mode
+            Row(
                 modifier = Modifier
-                    .height(450.dp)
-                    .width(450.dp),
-                contentScale = ContentScale.Fit
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Title Text
-            Text(
-                text = "Welcome to Dice Dash!",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(30.dp))
-
-            // New Game Button
-            Button(
-                onClick = { navController.navigate("gameScreen") }, // Navigates to game screen
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFADD7FE)),
-                modifier = Modifier.padding(10.dp)
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Text("New Game", fontSize = 18.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                // Left: Dice Image
+                Image(
+                    painter = painterResource(id = R.drawable.dice),
+                    contentDescription = "Welcome Image",
+                    modifier = Modifier
+                        .height(350.dp)
+                        .width(350.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                // Right: Text & Buttons
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Welcome to Dice Dash!",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = { navController.navigate("gameScreen") },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFADD7FE)),
+                        modifier = Modifier.padding(10.dp)
+                    ) {
+                        Text("New Game", fontSize = 18.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { showAbout = true },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFADD7FE)),
+                        modifier = Modifier.padding(10.dp)
+                    ) {
+                        Text("About", fontSize = 18.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
-
-            // About Button
-            Button(
-                onClick = { showAbout = true }, // Opens the About Dialog
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFADD7FE)),
-                modifier = Modifier.padding(10.dp)
+        } else {
+            // 📲 Portrait Mode (your original layout)
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("About", fontSize = 18.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                Image(
+                    painter = painterResource(id = R.drawable.dice),
+                    contentDescription = "Welcome Image",
+                    modifier = Modifier
+                        .height(450.dp)
+                        .width(450.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "Welcome to Dice Dash!",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(30.dp))
+
+                Button(
+                    onClick = { navController.navigate("gameScreen") },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFADD7FE)),
+                    modifier = Modifier.padding(10.dp)
+                ) {
+                    Text("New Game", fontSize = 18.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = { showAbout = true },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFADD7FE)),
+                    modifier = Modifier.padding(10.dp)
+                ) {
+                    Text("About", fontSize = 18.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
 
-    // About Dialog (Popup)
+    // About Dialog
     if (showAbout) {
         AlertDialog(
             onDismissRequest = { showAbout = false },
